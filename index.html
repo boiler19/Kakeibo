@@ -289,7 +289,6 @@ function budgetCard(){
     cats.forEach(function(c){var a=0;transactions.forEach(function(t){if(t.type==="expense"&&!t.reimbursable&&t.date.slice(0,7)===month&&t.category===c)a+=t.amount;});var bud=budgets.categories[c];
       h+='<div style="margin-bottom:11px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span>'+esc(c)+'</span><span style="font-variant-numeric:tabular-nums;color:'+C.muted+'">'+yen(a)+' / '+yen(bud)+'</span></div>'+progressBar(a,bud)+'</div>';});
     h+='</div></div>';
-    h+=catDetail();
   }
   h+='</div>';return h;
 }
@@ -385,6 +384,7 @@ function viewDashboard(){
     h+='<div class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px"><div class="donutwrap">'+donut(pie,170)+'<div class="donutcenter"><span style="font-size:10px;color:'+C.muted+'">費用計</span><span style="font-size:15px;font-weight:800;font-variant-numeric:tabular-nums">'+yen(t.expense)+'</span></div></div><div class="legend">';
     pie.forEach(function(d,i){var on=expandedCat===d.name;h+='<div class="legrow" data-act="toggleCat" data-name="'+esc(d.name)+'" style="cursor:pointer;padding:2px 0;'+(on?'font-weight:800':'')+'"><span class="sw" style="background:'+PIE[i%PIE.length]+'"></span><span class="nm">'+esc(d.name)+'</span><b>'+yen(d.value)+'</b><span style="margin-left:6px;color:'+C.muted+';font-size:11px">'+(on?'▾':'▸')+'</span></div>';});
     h+='</div></div>';
+    h+=catDetail();
   }
   h+='</div>';
 
