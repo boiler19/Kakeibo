@@ -270,14 +270,25 @@ function donut(data,size){
 function dailyBars(){
   var p=month.split("-");var days=new Date(+p[0],+p[1],0).getDate();
   var arr=[];for(var i=0;i<days;i++)arr.push(0);
-  transactions.forEach(function(t){if(t.type==="expense"&&!t.reimbursable&&t.date.slice(0,7)===month){var d=+t.date.slice(8,10);if(arr[d-1]!=null)arr[d-1]+=t.amount;}});
+  transactions.forEach(function(t){if(t.type==="expense"&&!t.reimbursable&&t.date.slice(0,7)===month){var dd=+t.date.slice(8,10);if(arr[dd-1]!=null)arr[dd-1]+=t.amount;}});
   var line=dailyBudgetOf(days);
   if(!arr.some(function(v){return v>0;})&&line<=0)return '<div class="empty">まだ記録がありません</div>';
-  var max=Math.max.apply(null,arr.concat([1,line]));
-  var cols=arr.map(function(v,i){var h=Math.round(v/max*130);var lbl=(i===0||(i+1)%5===0)?(i+1):"";return '<div class="barcol"><div class="bar" style="height:'+h+'px;background:'+C.negative+'"></div><div class="barlbl">'+lbl+'</div></div>';}).join("");
-  var lineDiv=line>0?'<div style="position:absolute;left:0;right:0;bottom:'+(16+line/max*130)+'px;border-top:1.5px dashed '+C.negative+'"></div>':'';
-  var note=line>0?'<div style="font-size:11px;color:'+C.muted+';margin-top:8px">- - 1日の予算 '+yen(line)+'</div>':'';
-  return '<div style="position:relative"><div class="bars">'+cols+'</div>'+lineDiv+'</div>'+note;
+  var W=340,H=190,padL=34,padR=8,padT=16,padB=22,N=days;
+  var plotW=W-padL-padR,plotH=H-padT-padB;
+  var maxRaw=Math.max.apply(null,arr.concat([1,line]));
+  var ticks=niceTicks(0,maxRaw,3);var maxV=Math.max(ticks[ticks.length-1],maxRaw);
+  function Y(v){return padT+(maxV-v)/maxV*plotH;}
+  var base=padT+plotH,slot=plotW/N,bw=Math.min(9,slot*0.62);
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block;margin-top:10px">';
+  ticks.forEach(function(tv){var y=Y(tv);svg+='<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="'+C.line+'" stroke-width="1"/><text x="'+(padL-4)+'" y="'+(y+3).toFixed(1)+'" font-size="8" fill="'+C.muted+'" text-anchor="end">'+axisFmt(tv)+'</text>';});
+  var maxIdx=arr.indexOf(Math.max.apply(null,arr));
+  arr.forEach(function(v,i){var x=padL+slot*(i+0.5),y=Y(v);svg+='<rect x="'+(x-bw/2).toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+(base-y).toFixed(1)+'" rx="1.5" fill="'+C.negative+'"/>';});
+  if(line>0){var ly=Y(line);svg+='<line x1="'+padL+'" y1="'+ly.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+ly.toFixed(1)+'" stroke="'+C.ink+'" stroke-width="1" stroke-dasharray="3 2"/>';}
+  if(arr[maxIdx]>0){var mx=padL+slot*(maxIdx+0.5),my=Y(arr[maxIdx]);svg+='<text x="'+mx.toFixed(1)+'" y="'+(my-3).toFixed(1)+'" font-size="8" font-weight="700" fill="'+C.negative+'" text-anchor="middle">'+axisFmt(arr[maxIdx])+'</text>';}
+  arr.forEach(function(v,i){if(i===0||(i+1)%5===0){var x=padL+slot*(i+0.5);svg+='<text x="'+x.toFixed(1)+'" y="'+(H-7)+'" font-size="8" fill="'+C.muted+'" text-anchor="middle">'+(i+1)+'</text>';}});
+  svg+='</svg>';
+  var note=line>0?'<div style="font-size:11px;color:'+C.muted+';margin-top:6px">- - 1日の予算 '+yen(line)+'</div>':'';
+  return svg+note;
 }
 function trendBars(){
   var out=[];
@@ -314,44 +325,48 @@ function amountKeypad(){
 }
 function assetAt(cutoff){var tot=0;accounts.forEach(function(a){tot+=a.initial||0;});transactions.forEach(function(t){if(t.date>cutoff)return;if(t.type==="income")tot+=t.amount;else if(t.type==="expense"){if(t.reimbursable&&t.settled)return;tot-=t.amount;}});return tot;}
 function assetChart(series){
-  var W=340,H=150,padL=6,padR=6,padT=10,padB=20,N=series.length;
-  var vals=series.map(function(s){return s.val;});var maxV=Math.max.apply(null,vals),minV=Math.min.apply(null,vals);
-  if(maxV===minV){maxV+=1;minV-=1;}var mrg=(maxV-minV)*0.12;maxV+=mrg;minV-=mrg;
+  var W=340,H=170,padL=38,padR=8,padT=16,padB=20,N=series.length;
+  var vals=series.map(function(s){return s.val;});
+  var maxV=Math.max.apply(null,vals),minV=Math.min.apply(null,vals);
+  var ticks=niceTicks(Math.min(minV,0),maxV,3);
+  var hi=Math.max(maxV,ticks[ticks.length-1]),lo=Math.min(minV,ticks[0]),range=(hi-lo)||1;
   var plotW=W-padL-padR,plotH=H-padT-padB;
   function X(i){return padL+(N<=1?plotW/2:plotW*i/(N-1));}
-  function Y(v){return padT+(maxV-v)/(maxV-minV)*plotH;}
+  function Y(v){return padT+(hi-v)/range*plotH;}
   var pts=series.map(function(s,i){return X(i).toFixed(1)+","+Y(s.val).toFixed(1);});
-  var base=(padT+plotH).toFixed(1);
-  var area="M "+X(0).toFixed(1)+","+base+" L "+pts.join(" L ")+" L "+X(N-1).toFixed(1)+","+base+" Z";
-  var last=series[N-1];
+  var base=Y(Math.max(lo,0));
+  var area="M "+X(0).toFixed(1)+","+base.toFixed(1)+" L "+pts.join(" L ")+" L "+X(N-1).toFixed(1)+","+base.toFixed(1)+" Z";
   var svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block;margin-top:10px">';
   svg+='<defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+C.income+'" stop-opacity="0.22"/><stop offset="1" stop-color="'+C.income+'" stop-opacity="0"/></linearGradient></defs>';
+  ticks.forEach(function(tv){var y=Y(tv);svg+='<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="'+C.line+'" stroke-width="1"/><text x="'+(padL-4)+'" y="'+(y+3).toFixed(1)+'" font-size="8" fill="'+C.muted+'" text-anchor="end">'+axisFmt(tv)+'</text>';});
   svg+='<path d="'+area+'" fill="url(#ag)"/>';
   svg+='<path d="M '+pts.join(" L ")+'" fill="none" stroke="'+C.income+'" stroke-width="2" stroke-linejoin="round"/>';
-  svg+='<circle cx="'+X(N-1).toFixed(1)+'" cy="'+Y(last.val).toFixed(1)+'" r="3" fill="'+C.income+'"/>';
-  svg+='<text x="'+padL+'" y="'+(H-5)+'" font-size="9" fill="'+C.muted+'">'+series[0].label+'</text>';
-  svg+='<text x="'+(W-padR)+'" y="'+(H-5)+'" font-size="9" fill="'+C.muted+'" text-anchor="end">'+last.label+'</text>';
+  series.forEach(function(s,i){var x=X(i),y=Y(s.val);svg+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="2.3" fill="'+C.income+'"/>';if(i===0||i===N-1){svg+='<text x="'+x.toFixed(1)+'" y="'+(y-5).toFixed(1)+'" font-size="7.5" font-weight="700" fill="'+C.income+'" text-anchor="'+(i===0?"start":"end")+'">'+axisFmt(s.val)+'</text>';}});
+  series.forEach(function(s,i){var x=X(i);svg+='<text x="'+x.toFixed(1)+'" y="'+(H-6)+'" font-size="8" fill="'+C.muted+'" text-anchor="middle">'+s.label+'</text>';});
   return svg+'</svg>';
 }
+function axisFmt(v){var a=Math.abs(v);if(a>=10000){var w=v/10000;return (Math.abs(w)<10?(Math.round(w*10)/10):Math.round(w))+"万";}return Math.round(v).toLocaleString("ja-JP");}
+function niceStep(raw){if(raw<=0)return 1;var pow=Math.pow(10,Math.floor(Math.log(raw)/Math.LN10));var f=raw/pow;var nf=f<1.5?1:(f<3?2:(f<7?5:10));return nf*pow;}
+function niceTicks(min,max,cnt){if(max<=min)max=min+1;var step=niceStep((max-min)/(cnt||4));var start=Math.floor(min/step)*step;var t=[];for(var v=start;v<=max+step*0.5;v+=step){t.push(Math.round(v));}return t;}
 function comboChart(data){
-  var W=340,H=190,padL=8,padR=8,padT=14,padB=24,N=data.length;
+  var W=340,H=210,padL=34,padR=8,padT=20,padB=24,N=data.length;
   var plotW=W-padL-padR,plotH=H-padT-padB;
   var profits=data.map(function(d){return d.inc-d.exp;});
   var maxV=Math.max.apply(null,data.map(function(d){return Math.max(d.inc,d.exp);}).concat(profits).concat([0]));
   var minV=Math.min.apply(null,profits.concat([0]));
-  var range=(maxV-minV)||1;
-  function Y(v){return padT+(maxV-v)/range*plotH;}
-  var zeroY=Y(0),slot=plotW/N,bw=Math.min(13,slot*0.28);
+  var ticks=niceTicks(minV,maxV,4);
+  var hi=Math.max(maxV,ticks[ticks.length-1]),lo=Math.min(minV,ticks[0]),range=(hi-lo)||1;
+  function Y(v){return padT+(hi-v)/range*plotH;}
+  var zeroY=Y(0),slot=plotW/N,bw=Math.min(10,slot*0.24);
   var svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block;margin-top:10px">';
-  svg+='<line x1="'+padL+'" y1="'+zeroY.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+zeroY.toFixed(1)+'" stroke="'+C.line+'" stroke-width="1" stroke-dasharray="3 3"/>';
+  ticks.forEach(function(tv){var y=Y(tv);svg+='<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="'+(tv===0?C.muted:C.line)+'" stroke-width="1"/><text x="'+(padL-4)+'" y="'+(y+3).toFixed(1)+'" font-size="8" fill="'+C.muted+'" text-anchor="end">'+axisFmt(tv)+'</text>';});
   data.forEach(function(d,idx){var cx=padL+slot*(idx+0.5);
-    svg+='<rect x="'+(cx-bw-1).toFixed(1)+'" y="'+Y(d.inc).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.abs(zeroY-Y(d.inc)).toFixed(1)+'" rx="2" fill="#2B59FF"/>';
-    svg+='<rect x="'+(cx+1).toFixed(1)+'" y="'+Y(d.exp).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.abs(zeroY-Y(d.exp)).toFixed(1)+'" rx="2" fill="#E5484D"/>';});
-  for(var q=0;q<N-1;q++){var x1=padL+slot*(q+0.5),x2=padL+slot*(q+1.5),y1=Y(profits[q]),y2=Y(profits[q+1]);
-    var col=(profits[q]>=0&&profits[q+1]>=0)?C.ink:C.negative;
-    svg+='<line x1="'+x1.toFixed(1)+'" y1="'+y1.toFixed(1)+'" x2="'+x2.toFixed(1)+'" y2="'+y2.toFixed(1)+'" stroke="'+col+'" stroke-width="2" stroke-linecap="round"/>';}
-  data.forEach(function(d,idx){var x=padL+slot*(idx+0.5),y=Y(profits[idx]),col=profits[idx]>=0?C.ink:C.negative;svg+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="2.6" fill="'+col+'"/>';});
-  data.forEach(function(d,idx){var x=padL+slot*(idx+0.5);svg+='<text x="'+x.toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle" font-size="9" fill="'+C.muted+'">'+d.label+'</text>';});
+    svg+='<rect x="'+(cx-bw-1).toFixed(1)+'" y="'+Y(d.inc).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.abs(zeroY-Y(d.inc)).toFixed(1)+'" rx="1.5" fill="#2B59FF"/>';
+    svg+='<rect x="'+(cx+1).toFixed(1)+'" y="'+Y(d.exp).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.abs(zeroY-Y(d.exp)).toFixed(1)+'" rx="1.5" fill="#E5484D"/>';});
+  for(var q=0;q<N-1;q++){var x1=padL+slot*(q+0.5),x2=padL+slot*(q+1.5),y1=Y(profits[q]),y2=Y(profits[q+1]);var col=(profits[q]>=0&&profits[q+1]>=0)?C.ink:C.negative;svg+='<line x1="'+x1.toFixed(1)+'" y1="'+y1.toFixed(1)+'" x2="'+x2.toFixed(1)+'" y2="'+y2.toFixed(1)+'" stroke="'+col+'" stroke-width="2" stroke-linecap="round"/>';}
+  data.forEach(function(d,idx){var x=padL+slot*(idx+0.5),y=Y(profits[idx]),col=profits[idx]>=0?C.ink:C.negative;svg+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="2.4" fill="'+col+'"/>';
+    if(N<=8){var ab=profits[idx]>=0;svg+='<text x="'+x.toFixed(1)+'" y="'+(ab?(y-5):(y+11)).toFixed(1)+'" font-size="7.5" font-weight="700" fill="'+col+'" text-anchor="middle">'+axisFmt(profits[idx])+'</text>';}});
+  data.forEach(function(d,idx){var x=padL+slot*(idx+0.5);svg+='<text x="'+x.toFixed(1)+'" y="'+(H-8)+'" font-size="8" fill="'+C.muted+'" text-anchor="middle">'+d.label+'</text>';});
   return svg+'</svg>';
 }
 function kindIcon(kind){
